@@ -1,0 +1,17 @@
+{
+  "name": "AI Farmer",
+  "short_name": "AI Farmer",
+  "description": "Farm planning, crop tracking, and field records for Indian farmers.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f7f3",
+  "theme_color": "#176b3a",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

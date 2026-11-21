@@ -1,0 +1,59 @@
+# Core Framework
+streamlit>=1.42,<2
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+python-multipart
+httpx
+
+# Authentication
+passlib==1.7.4
+bcrypt==4.0.1
+python-jose[cryptography]
+
+# LangChain & LangGraph
+langchain
+langchain-core
+langchain-community
+langchain-openai
+langchain-groq
+langgraph
+
+# ML & Data Science
+numpy
+pandas
+scikit-learn
+joblib
+xgboost
+
+# Computer Vision
+pillow
+opencv-python
+torch
+torchvision
+ultralytics
+
+# Weather & External APIs
+requests
+httpx
+
+# Database
+sqlalchemy
+alembic
+psycopg2-binary>=2.9,<3
+
+# RAG & Vector DB
+chromadb
+sentence-transformers
+
+# Utilities
+python-dotenv
+pyyaml
+jinja2
+rich
+loguru
+
+# Testing
+pytest
+pytest-asyncio
