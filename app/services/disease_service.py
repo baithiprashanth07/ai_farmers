@@ -1,11 +1,4 @@
-"""Disease and pest detection service using YOLOv11 Computer Vision.
-
-Production-ready disease detection with:
-- YOLOv11 model inference
-- Knowledge-based fallback
-- Multi-crop support
-- Treatment recommendation engine
-"""
+"""Crop disease references and optional YOLOv11 image detection."""
 import os
 from typing import Dict, Any, List, Optional
 from PIL import Image
@@ -227,17 +220,15 @@ class DiseaseDetectionService:
         }
 
     def detect_from_image(self, image_path: str, crop_type: str = None) -> Dict[str, Any]:
-        """Detect disease from crop image using YOLOv11 or knowledge-based fallback."""
+        """Detect disease from an image only when a trained model is available."""
         try:
-            img = Image.open(image_path)
+            with Image.open(image_path) as image:
+                image.verify()
 
             if self.model_loaded and self.model:
-                # Real YOLOv11 inference
                 results = self.model(image_path)
                 return self._parse_yolo_results(results, crop_type)
-            else:
-                # Knowledge-based detection with image analysis
-                return self._knowledge_based_detection(img, crop_type)
+            return self._photo_model_unavailable()
 
         except Exception as e:
             logger.error(f"Disease detection error: {e}")
@@ -245,14 +236,29 @@ class DiseaseDetectionService:
                 "disease_name": "Unable to detect",
                 "confidence": 0,
                 "severity": "unknown",
+                "detection_method": "image_error",
                 "message": "Image analysis failed. Please provide a clearer image or describe symptoms.",
-                "recommendation": "Consult a local agricultural expert with the sample."
+                "recommendation": "Consult a local agricultural expert with the sample.",
             }
+
+    @staticmethod
+    def _photo_model_unavailable() -> Dict[str, Any]:
+        return {
+            "disease_name": "Unable to detect",
+            "confidence": 0,
+            "severity": "unknown",
+            "detection_method": "model_unavailable",
+            "message": (
+                "No trained crop-disease image model is installed. Use symptom-based guidance "
+                "or consult a local agricultural expert."
+            ),
+            "recommendation": "Do not treat a crop based on an unverified image.",
+        }
 
     def _parse_yolo_results(self, results, crop_type: str = None) -> Dict[str, Any]:
         """Parse YOLOv11 detection results."""
         if not results or len(results) == 0:
-            return self._knowledge_based_detection(None, crop_type)
+            return self._photo_model_unavailable()
 
         result = results[0]
 
@@ -282,42 +288,7 @@ class DiseaseDetectionService:
                 ]
             }
 
-        return self._knowledge_based_detection(None, crop_type)
-
-    def _knowledge_based_detection(self, img: Image.Image, crop_type: str = None) -> Dict[str, Any]:
-        """Fallback detection using crop type and image properties."""
-        import random
-
-        if crop_type:
-            crop_diseases = {k: v for k, v in self.disease_database.items() 
-                           if v["crop"].lower() == crop_type.lower()}
-            if crop_diseases:
-                disease_key = random.choice(list(crop_diseases.keys()))
-                disease = crop_diseases[disease_key]
-                confidence = random.uniform(0.72, 0.94)
-            else:
-                disease_key = random.choice(list(self.disease_database.keys()))
-                disease = self.disease_database[disease_key]
-                confidence = random.uniform(0.55, 0.75)
-        else:
-            disease_key = random.choice(list(self.disease_database.keys()))
-            disease = self.disease_database[disease_key]
-            confidence = random.uniform(0.60, 0.85)
-
-        return {
-            "disease_name": disease["disease_name"],
-            "confidence": round(confidence, 3),
-            "severity": disease["severity"],
-            "symptoms": disease["symptoms"],
-            "causes": disease["causes"],
-            "organic_treatment": disease["organic_treatment"],
-            "chemical_treatment": disease["chemical_treatment"],
-            "preventive_measures": disease["preventive_measures"],
-            "economic_threshold": disease.get("economic_threshold", "Consult expert"),
-            "crop_affected": disease["crop"],
-            "detection_method": "knowledge_based_cv",
-            "note": "YOLOv11 model not loaded. Run: python scripts/train_yolo_disease.py to enable real detection."
-        }
+        return self._photo_model_unavailable()
 
     def detect_from_symptoms(self, crop: str, symptoms: List[str]) -> Dict[str, Any]:
         """Detect disease from described symptoms."""

@@ -1,13 +1,27 @@
 import json
+from datetime import date, timedelta
 from types import SimpleNamespace
+
+from PIL import Image
 
 from app.agents.agronomist_agent import AgronomistAgent
 from app.agents.crop_recommendation_agent import CropRecommendationAgent
 from app.agents.state_crop_intelligence_agent import StateCropIntelligenceAgent
 from app.api.main import _build_farm_suggestions
-from app.schemas.models import FarmInput
+from app.schemas.models import FarmerLanguage, FarmInput
 from app.services.agriculture_reference import get_state_crop_reference, list_indian_regions
 from app.services.ai_service import AIService
+from app.services.agriculture_updates import get_daily_agriculture_update
+from app.services.crop_calendar import build_daily_crop_schedule, get_crop_duration_days
+from app.services.crop_reference_catalog import get_crop_categories, get_crop_seasons
+from app.services.farm_calculator import (
+    calculate_fertilizer_requirement,
+    estimate_crop_budget,
+)
+from app.services.farmer_tools import list_farmer_tools
+from app.services.disease_service import DiseaseDetectionService
+from app.services.gov_scheme_service import GovernmentSchemeService
+from app.services.india_languages import INDIAN_LANGUAGES, LANGUAGE_DISPLAY_NAMES
 from app.services.location_service import LocationService
 from app.services.weather_service import WeatherService
 
@@ -38,6 +52,171 @@ class StubHTTPClient:
     def post(self, url, **kwargs):
         self.calls.append((url, kwargs))
         return self.response
+
+
+def test_daily_agriculture_brief_changes_by_date_and_links_official_sources():
+    first_date = date(2026, 11, 22)
+    first = get_daily_agriculture_update(first_date)
+    next_day = get_daily_agriculture_update(first_date + timedelta(days=1))
+
+    assert first["date"] == "2026-11-22"
+    assert first["is_live_news"] is False
+    assert first["checklist_title"] != next_day["checklist_title"]
+    assert any("imd.gov.in" in source["url"] for source in first["official_sources"])
+    assert any("myscheme.gov.in" in source["url"] for source in first["official_sources"])
+
+
+def test_scheme_recommendations_are_state_aware_and_do_not_mutate_catalog():
+    service = GovernmentSchemeService()
+    recommendations = service.get_relevant_schemes("Punjab", "wheat", 1.5)
+
+    assert len(recommendations) == 10
+    assert all(item["farmer_state"] == "Punjab" for item in recommendations)
+    assert recommendations[0]["relevance_score"] >= 70
+    recommendations[0]["farmer_state"] = "Changed"
+    assert all("farmer_state" not in item for item in service.schemes)
+    assert any("state" in item["coverage"].lower() for item in recommendations)
+
+
+def test_farm_calculators_scale_rates_and_estimate_whole_field_returns():
+    fertilizer = calculate_fertilizer_requirement(3.5, 12.5, 20)
+    budget = estimate_crop_budget(5, 20, 2200, 8000)
+
+    assert fertilizer == {"quantity_kg": 43.75, "estimated_cost_inr": 875.0}
+    assert budget == {
+        "total_yield_quintal": 100,
+        "gross_revenue_inr": 220000,
+        "total_cost_inr": 40000,
+        "estimated_net_inr": 180000,
+    }
+
+
+def test_farm_calculators_reject_invalid_area_and_negative_inputs():
+    import pytest
+
+    with pytest.raises(ValueError):
+        calculate_fertilizer_requirement(0, 10)
+    with pytest.raises(ValueError):
+        estimate_crop_budget(1, -1, 2000, 5000)
+
+
+def test_farmer_services_directory_covers_requested_apps_and_has_safe_links():
+    tools = list_farmer_tools()
+    names = {tool["name"] for tool in tools}
+    expected_names = {
+        "Kisan Suvidha",
+        "Meghdoot",
+        "Mausam",
+        "eNAM",
+        "PM-KISAN",
+        "Crop Insurance (PMFBY)",
+        "Soil Health Card",
+        "Kisan e-Mitra",
+        "Bharat-VISTAAR",
+        "National Pest Surveillance System (NPSS)",
+        "AgroStar",
+        "DeHaat Kisan",
+        "Plantix",
+        "Krishify",
+        "Bijak",
+        "Ninja Kisan",
+        "Arya.ag",
+        "Outgrow",
+        "FarMart",
+        "AgriApp",
+    }
+
+    assert names == expected_names
+    assert all(
+        tool["url"].startswith("https://")
+        and tool["features"]
+        and tool["best_for"]
+        for tool in tools
+    )
+
+
+def test_crop_calendar_builds_a_daily_schedule_through_expected_harvest():
+    sowing_date = date(2026, 6, 15)
+    schedule = build_daily_crop_schedule("Rice", sowing_date)
+
+    assert get_crop_duration_days("paddy") == 120
+    assert schedule["duration_days"] == 120
+    assert len(schedule["daily_schedule"]) == 121
+    assert schedule["daily_schedule"][0]["date"] == "2026-06-15"
+    assert schedule["daily_schedule"][0]["day_after_sowing"] == 0
+    assert schedule["daily_schedule"][-1]["day_after_sowing"] == 120
+    assert schedule["daily_schedule"][-1]["weekly_or_milestone_task"].startswith("Record harvest")
+    assert "panicle" in schedule["daily_schedule"][75]["stage_guidance"]
+    assert all(item["daily_check"] for item in schedule["daily_schedule"])
+
+
+def test_crop_calendar_uses_farmer_harvest_date_for_unlisted_crop():
+    sowing_date = date(2026, 3, 1)
+    harvest_date = date(2026, 5, 30)
+
+    schedule = build_daily_crop_schedule("Watermelon", sowing_date, harvest_date)
+
+    assert schedule["duration_days"] == 90
+    assert schedule["expected_harvest_date"] == "2026-05-30"
+
+
+def test_crop_reference_includes_seasons_and_expanded_use_categories():
+    seasons = {season["name"]: season for season in get_crop_seasons()}
+    categories = {item["name"] for item in get_crop_categories()}
+
+    assert {"Kharif", "Rabi", "Zaid"} == set(seasons)
+    assert "June–July" in seasons["Kharif"]["description"]
+    assert {
+        "Food grains and pulses",
+        "Commercial and fibre crops",
+        "Oilseeds",
+        "Plantation crops",
+        "Horticulture",
+        "Spices and condiments",
+        "Fodder crops",
+        "Medicinal and aromatic crops",
+    }.issubset(categories)
+
+
+def test_language_options_include_scheduled_languages_with_native_names():
+    scheduled_language_codes = {
+        language.value
+        for language in FarmerLanguage
+        if language != FarmerLanguage.ENGLISH
+    }
+
+    assert {language["code"] for language in INDIAN_LANGUAGES} == scheduled_language_codes
+    for language in INDIAN_LANGUAGES:
+        assert LANGUAGE_DISPLAY_NAMES[language["code"]] == (
+            f"{language['name']} ({language['native_name']})"
+        )
+
+
+def test_disease_image_check_never_guesses_when_model_is_unavailable(tmp_path):
+    service = object.__new__(DiseaseDetectionService)
+    service.model = None
+    service.model_loaded = False
+    image_path = tmp_path / "leaf.png"
+    Image.new("RGB", (8, 8), color="green").save(image_path)
+
+    result = service.detect_from_image(str(image_path), "Tomato")
+
+    assert result["disease_name"] == "Unable to detect"
+    assert result["detection_method"] == "model_unavailable"
+    assert result["confidence"] == 0
+
+
+def test_symptom_check_returns_a_reference_match_without_model_inference():
+    service = object.__new__(DiseaseDetectionService)
+    service.disease_database = service._load_disease_database()
+
+    result = service.detect_from_symptoms("Tomato", [
+        "Dark brown spots with concentric rings (target spot)",
+        "Yellowing of older leaves from bottom",
+    ])
+
+    assert result["disease_name"] == "Early Blight"
+    assert result["detection_method"] == "symptom_based"
 
 
 def test_ai_provider_auto_selects_the_first_configured_vendor():

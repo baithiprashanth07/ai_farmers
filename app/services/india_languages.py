@@ -30,3 +30,10 @@ LANGUAGE_NAMES: Dict[str, str] = {
     "en": "English",
     **{item["code"]: item["name"] for item in INDIAN_LANGUAGES},
 }
+LANGUAGE_DISPLAY_NAMES: Dict[str, str] = {
+    "en": "English",
+    **{
+        item["code"]: f"{item['name']} ({item['native_name']})"
+        for item in INDIAN_LANGUAGES
+    },
+}
