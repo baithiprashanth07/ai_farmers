@@ -47,5 +47,25 @@ def get_state_crop_reference(state: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def get_state_crop_options(state: str) -> List[str]:
+    """Return unique major and specialty crop options for a state or union territory."""
+    reference = get_state_crop_reference(state)
+    if not reference:
+        return []
+
+    crops = [
+        *reference.get("major_crops", []),
+        *reference.get("specialty_crops", []),
+    ]
+    seen = set()
+    unique_crops = []
+    for crop in crops:
+        normalized = crop.strip().casefold()
+        if normalized not in seen:
+            seen.add(normalized)
+            unique_crops.append(crop)
+    return unique_crops
+
+
 def get_crop_reference_note() -> str:
     return _load_reference()["source_note"]

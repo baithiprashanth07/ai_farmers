@@ -317,7 +317,9 @@ class DatabaseService:
                 session.add(profile)
 
             for key, value in profile_data.items():
-                if hasattr(profile, key) and value is not None:
+                if hasattr(profile, key) and (
+                    value is not None or key in {"latitude", "longitude"}
+                ):
                     if key in ["crops_history", "current_crops", "preferred_crops", "equipment_owned"]:
                         setattr(profile, key, json.dumps(value) if isinstance(value, list) else value)
                     else:
@@ -345,6 +347,8 @@ class DatabaseService:
                 "state": profile.state,
                 "district": profile.district,
                 "village": profile.village,
+                "latitude": profile.latitude,
+                "longitude": profile.longitude,
                 "farm_size_acres": profile.farm_size_acres,
                 "soil_type": profile.soil_type,
                 "irrigation_type": profile.irrigation_type,

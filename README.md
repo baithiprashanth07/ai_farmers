@@ -1,6 +1,6 @@
 # 🌾 AI Farmer — Mobile-Ready Farm Planning and Crop Tracking
 
-> **A practical farming workspace for crop planning, field records, and agricultural advice.**
+> **Your farm, a clear plan. Smart steps for steady growth.**
 >
 > 🔐 Farmer Accounts | 🌱 Crop Tracking | 🤖 Shared-State Agent Workflow | 📱 Installable Web App | 💰 Farm Diary
 
@@ -34,7 +34,7 @@ AI Farmer is a farmer-focused web application backed by FastAPI and LangGraph. F
 ### Key Capabilities
 - **Live farm analysis**: See specialist-agent progress and the final farm advisory as it is produced.
 - **Sequential agent handoffs**: Each selected workflow receives the shared farm context, earlier findings, and agent messages.
-- **Automatic field recommendations**: Search a town or district, choose a season and farm inputs, and receive location-specific weather plus crop, seed, fertilizer, irrigation, soil, and market estimates.
+- **Automatic field recommendations**: Choose a state, enter a district and village/town, and use contextual geocoder suggestions for a location; receive regional crop choices and location-specific weather plus crop, seed, fertilizer, irrigation, soil, and market estimates.
 - **Multiple model providers**: Configure OpenAI, Groq, Gemini, Anthropic Claude, OpenRouter, Ollama, or another OpenAI-compatible endpoint.
 - **Indian-language AI advice**: Select English or any of India's 22 scheduled languages for generated agronomist advice; Indian language options are shown in English and their native scripts. The rest of the dashboard interface remains in English.
 - **Regional crop planning**: State/UT selection loads major and specialty crop reference candidates for all 28 states and 8 union territories, with regional crop candidates used to inform rankings.

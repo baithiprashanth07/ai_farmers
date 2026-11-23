@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import date, timedelta
 from types import SimpleNamespace
 
@@ -9,7 +10,11 @@ from app.agents.crop_recommendation_agent import CropRecommendationAgent
 from app.agents.state_crop_intelligence_agent import StateCropIntelligenceAgent
 from app.api.main import _build_farm_suggestions
 from app.schemas.models import FarmerLanguage, FarmInput
-from app.services.agriculture_reference import get_state_crop_reference, list_indian_regions
+from app.services.agriculture_reference import (
+    get_state_crop_options,
+    get_state_crop_reference,
+    list_indian_regions,
+)
 from app.services.ai_service import AIService
 from app.services.agriculture_updates import get_daily_agriculture_update
 from app.services.crop_calendar import build_daily_crop_schedule, get_crop_duration_days
@@ -20,6 +25,7 @@ from app.services.farm_calculator import (
 )
 from app.services.farmer_tools import list_farmer_tools
 from app.services.disease_service import DiseaseDetectionService
+from app.services.database import FarmerProfile, User, db_service
 from app.services.gov_scheme_service import GovernmentSchemeService
 from app.services.india_languages import INDIAN_LANGUAGES, LANGUAGE_DISPLAY_NAMES
 from app.services.location_service import LocationService
@@ -508,6 +514,85 @@ def test_indicative_crop_reference_covers_all_states_and_union_territories():
     assert all(region["major_crops"] and region["specialty_crops"] for region in regions)
     assert get_state_crop_reference("Orissa")["name"] == "Odisha"
     assert get_state_crop_reference("Pondicherry")["name"] == "Puducherry"
+    punjab_crops = get_state_crop_options("Punjab")
+    assert "wheat" in punjab_crops
+    assert "Basmati rice" in punjab_crops
+    assert len({crop.casefold() for crop in punjab_crops}) == len(punjab_crops)
+
+
+def test_location_search_uses_state_context_and_filters_other_states(monkeypatch):
+    observed = {}
+
+    def fake_get(url, params, timeout):
+        observed.update(params)
+        return StubResponse({"results": [
+            {
+                "name": "Dugri",
+                "admin1": "Punjab",
+                "admin2": "Ludhiana",
+                "country": "India",
+                "latitude": 30.9,
+                "longitude": 75.8,
+            },
+            {
+                "name": "Dugri",
+                "admin1": "Haryana",
+                "admin2": "Hisar",
+                "country": "India",
+                "latitude": 29.1,
+                "longitude": 75.7,
+            },
+        ]})
+
+    monkeypatch.setattr("app.services.location_service.httpx.get", fake_get)
+
+    locations = LocationService().search(
+        "Dugri",
+        state="Punjab",
+        district="Ludhiana",
+    )
+
+    assert observed["name"] == "Dugri, Ludhiana, Punjab"
+    assert [location["state"] for location in locations] == ["Punjab"]
+
+
+def test_farm_profile_persists_village_and_clears_stale_coordinates():
+    user_id = str(uuid.uuid4())
+    session = db_service.get_session()
+    session.add(User(
+        id=user_id,
+        phone=f"9{uuid.uuid4().int % 10**9:09d}",
+        password_hash="not-used-for-this-test",
+        name="Location Test",
+    ))
+    session.commit()
+    try:
+        db_service.create_or_update_profile(user_id, {
+            "state": "Punjab",
+            "district": "Ludhiana",
+            "village": "Dugri",
+            "latitude": 30.9,
+            "longitude": 75.8,
+        })
+        profile = db_service.get_profile(user_id)
+        assert profile["village"] == "Dugri"
+        assert profile["latitude"] == 30.9
+        assert profile["longitude"] == 75.8
+
+        db_service.create_or_update_profile(user_id, {
+            "state": "Haryana",
+            "district": "Hisar",
+            "latitude": None,
+            "longitude": None,
+        })
+        profile = db_service.get_profile(user_id)
+        assert profile["latitude"] is None
+        assert profile["longitude"] is None
+    finally:
+        session.query(FarmerProfile).filter_by(user_id=user_id).delete()
+        session.query(User).filter_by(id=user_id).delete()
+        session.commit()
+        session.close()
 
 
 def test_regional_crop_reference_influences_crop_ranking():

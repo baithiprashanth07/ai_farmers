@@ -39,7 +39,11 @@ load_streamlit_secrets()
 
 from app.api.main import _build_farm_suggestions
 from app.schemas.models import FarmerLanguage, FarmInput, IrrigationType, Season, SoilType
-from app.services.agriculture_reference import get_crop_reference_note, list_indian_regions
+from app.services.agriculture_reference import (
+    get_crop_reference_note,
+    get_state_crop_options,
+    list_indian_regions,
+)
 from app.services.auth_service import auth_service
 from app.services.database import db_service
 from app.services.india_languages import LANGUAGE_DISPLAY_NAMES
@@ -60,62 +64,90 @@ from app.utils import generate_request_id
 st.markdown(
     """
     <style>
+    :root {
+        --farm-forest: #254c36;
+        --farm-leaf: #3c704a;
+        --farm-harvest: #b68a3a;
+        --farm-ink: #2b3a2f;
+    }
     html, body, [class*="css"] {
-        font-family: "Trebuchet MS", "Segoe UI", sans-serif;
-        color: #233b2b;
+        font-family: "Aptos", "Segoe UI", "Trebuchet MS", sans-serif;
+        color: var(--farm-ink);
     }
     [data-testid="stAppViewContainer"] {
-        background-image: linear-gradient(rgba(238, 246, 235, .82), rgba(238, 246, 235, .88)),
+        background-image: linear-gradient(rgba(247, 245, 233, .84), rgba(244, 246, 235, .90)),
             url("data:image/png;base64,__FARM_BACKGROUND__");
         background-position: center;
         background-size: cover;
         background-attachment: fixed;
     }
     [data-testid="stSidebar"] {
-        background-image: linear-gradient(rgba(233, 242, 224, .96), rgba(233, 242, 224, .96)),
+        background-image: linear-gradient(rgba(231, 239, 222, .97), rgba(238, 241, 225, .97)),
             url("data:image/png;base64,__FARM_BACKGROUND__");
         background-position: center;
         background-size: cover;
     }
     .block-container { max-width: 1240px; padding-top: 1.5rem; padding-bottom: 3rem; }
-    h1, h2, h3, h4 { color: #234b32; letter-spacing: -.025em; }
-    [data-testid="stMetric"] { background: rgba(247, 252, 245, .97); border: 1px solid #c8dbc4; padding: 14px; border-radius: 14px; }
+    h1, h2, h3, h4 {
+        color: var(--farm-forest);
+        font-family: "Georgia", "Palatino Linotype", serif;
+        letter-spacing: -.025em;
+    }
+    h1 { font-size: 2.45rem; }
+    .farm-tagline {
+        color: var(--farm-leaf);
+        font-family: "Georgia", "Palatino Linotype", serif;
+        font-size: 1.28rem;
+        font-weight: 700;
+        margin: -.35rem 0 .45rem;
+    }
+    [data-testid="stMetric"] { background: rgba(250, 250, 241, .98); border: 1px solid #d5d9c1; padding: 14px; border-radius: 14px; }
     [data-testid="stForm"], [data-testid="stTabs"] [role="tabpanel"] {
-        background: rgba(250, 252, 246, .96);
-        border: 1px solid rgba(190, 211, 183, .95);
+        background: rgba(251, 250, 242, .97);
+        border: 1px solid rgba(201, 211, 184, .96);
         border-radius: 16px;
         padding: 1.15rem;
     }
     [data-testid="stVerticalBlockBorderWrapper"] {
-        background: rgba(250, 252, 246, .92);
-        border: 1px solid rgba(207, 220, 199, .75);
+        background: rgba(251, 250, 242, .94);
+        border: 1px solid rgba(207, 212, 188, .82);
         border-radius: 16px;
     }
     [data-testid="stTabs"] button[role="tab"] {
-        color: #48634c;
+        color: #52654e;
         font-weight: 700;
         border-radius: 10px 10px 0 0;
         padding: .65rem .85rem;
     }
     [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
         color: #fff;
-        background: #34734a;
+        background: var(--farm-forest);
+        box-shadow: inset 0 -3px 0 var(--farm-harvest);
     }
     [data-testid="stButton"] button[kind="primary"],
     [data-testid="stFormSubmitButton"] button[kind="primary"] {
-        background: #34734a;
-        border-color: #34734a;
+        background: var(--farm-leaf);
+        border-color: var(--farm-leaf);
         border-radius: 10px;
+    }
+    [data-testid="stButton"] button[kind="primary"]:hover,
+    [data-testid="stFormSubmitButton"] button[kind="primary"]:hover {
+        background: var(--farm-forest);
+        border-color: var(--farm-forest);
     }
     [data-testid="stTextInput"] input, [data-testid="stNumberInput"] input,
     [data-testid="stSelectbox"] [data-baseweb="select"] > div {
         border-radius: 9px;
     }
-    .farm-card { border: 1px solid #cbdcc7; border-radius: 16px; padding: 16px; background: rgba(250,252,246,.96); margin: 8px 0 16px; }
+    [data-testid="stTextInput"] input:focus, [data-testid="stNumberInput"] input:focus {
+        border-color: var(--farm-harvest);
+        box-shadow: 0 0 0 1px var(--farm-harvest);
+    }
+    .farm-card { border: 1px solid #d1d8c0; border-radius: 16px; padding: 16px; background: rgba(251,250,242,.97); margin: 8px 0 16px; }
     .farm-card img { width: 100%; height: 100px; object-fit: cover; border-radius: 9px; margin-bottom: 10px; }
-    .weather-panel { padding: 14px; border-radius: 14px; background: linear-gradient(110deg, #f3fbff, #e1f1f6); border: 1px solid #c9e2ec; }
+    .weather-panel { padding: 14px; border-radius: 14px; background: linear-gradient(110deg, #f4f8ed, #e8f0df); border: 1px solid #cbd8b8; }
     .muted { color: #64736a; font-size: .9rem; }
-    img.farm-project-banner { display: block; width: 100%; height: auto; object-fit: contain; border: 1px solid #cbdcc7; border-radius: 18px; margin: 0 0 1.1rem; box-shadow: 0 8px 24px rgba(34, 73, 43, .12); }
+    img.farm-project-banner { display: block; width: 100%; height: auto; object-fit: contain; border: 1px solid #d1d8c0; border-radius: 18px; margin: 0 0 1.1rem; box-shadow: 0 8px 24px rgba(37, 76, 54, .14); }
     </style>
     """.replace("__FARM_BACKGROUND__", FARM_BACKGROUND),
     unsafe_allow_html=True,
@@ -210,6 +242,7 @@ def render_profile(user: Dict[str, Any]) -> Dict[str, Any]:
             state_index = names.index(state_default) if state_default in names else 0
             state = st.selectbox("🗺️ State / union territory", names, index=state_index)
             district = st.text_input("📍 District", value=profile.get("district") or "")
+            village = st.text_input("🏘️ Village / town", value=profile.get("village") or "")
             area = st.number_input(
                 "📐 Farm area (acres)",
                 min_value=0.1,
@@ -240,18 +273,83 @@ def render_profile(user: Dict[str, Any]) -> Dict[str, Any]:
                 if language_default in language_codes else 0,
                 format_func=lambda code: LANGUAGE_DISPLAY_NAMES[code],
             )
+            find_location = st.form_submit_button("🔎 Find district / village suggestions")
             saved = st.form_submit_button("💾 Save farm profile", type="primary")
+        if find_location:
+            st.session_state.pop("profile_selected_location", None)
+            place_query = village.strip() or district.strip()
+            if len(place_query) < 2:
+                st.warning("Enter a district or village name to search for place suggestions.")
+                st.session_state["profile_location_options"] = []
+            else:
+                locations = location_service.search(
+                    place_query,
+                    state=state,
+                    district=district.strip() or None,
+                )
+                st.session_state["profile_location_options"] = locations
+                st.session_state["profile_location_context"] = (
+                    state,
+                    district.strip(),
+                    village.strip(),
+                )
+                if not locations:
+                    st.warning("No matching places found. You can still enter the location manually.")
+
+        profile_locations = st.session_state.get("profile_location_options", [])
+        profile_location_context = (state, district.strip(), village.strip())
+        if st.session_state.get("profile_location_context") != profile_location_context:
+            profile_locations = []
+            st.session_state.pop("profile_location_options", None)
+            st.session_state.pop("profile_location_context", None)
+            st.session_state.pop("profile_selected_location", None)
+        if profile_locations:
+            profile_location_labels = [
+                f"{item['name']}, {item['district']}, {item['state']}"
+                for item in profile_locations
+            ]
+            selected_profile_label = st.selectbox(
+                "📍 Suggested places (not an exhaustive directory)",
+                profile_location_labels,
+                key=f"profile_location_choice_{user['id']}",
+            )
+            selected_profile_location = profile_locations[
+                profile_location_labels.index(selected_profile_label)
+            ]
+            st.session_state["profile_selected_location"] = selected_profile_location
+        else:
+            selected_profile_location = None
+
         if saved:
-            if not district.strip():
+            saved_district = district.strip() or (
+                selected_profile_location.get("district", "")
+                if selected_profile_location else ""
+            )
+            suggested_village = (
+                selected_profile_location.get("name", "")
+                if selected_profile_location else ""
+            )
+            if suggested_village.casefold() == saved_district.casefold():
+                suggested_village = ""
+            if not saved_district:
                 st.error("Enter a district to save your farm profile.")
             else:
                 result = db_service.create_or_update_profile(user["id"], {
                     "state": state,
-                    "district": district.strip(),
+                    "district": saved_district,
+                    "village": village.strip() or suggested_village or None,
                     "farm_size_acres": area,
                     "soil_type": soil or None,
                     "irrigation_type": irrigation or None,
                     "language_preference": language,
+                    "latitude": (
+                        selected_profile_location.get("latitude")
+                        if selected_profile_location else None
+                    ),
+                    "longitude": (
+                        selected_profile_location.get("longitude")
+                        if selected_profile_location else None
+                    ),
                 })
                 if result.get("success"):
                     st.success("Farm profile saved.")
@@ -279,7 +377,10 @@ def render_farm_plan(user: Dict[str, Any], profile: Dict[str, Any]) -> None:
     with st.form("farm_plan_form"):
         state = st.selectbox("🗺️ State / union territory", region_names, index=state_index)
         district = st.text_input("📍 District", value=profile.get("district") or "")
-        location_query = st.text_input("📌 Town or village for local weather (optional)")
+        location_query = st.text_input(
+            "🏘️ Village or town for location suggestions (optional)",
+            value=profile.get("village") or "",
+        )
         search_location = st.form_submit_button("🔎 Find weather location")
         area = st.number_input(
             "📐 Farm area (acres)",
@@ -295,6 +396,17 @@ def render_farm_plan(user: Dict[str, Any], profile: Dict[str, Any]) -> None:
             index=soil_options.index(soil_default) if soil_default in soil_options else 0,
         )
         season = st.selectbox("🗓️ Growing season", [season.value for season in Season])
+        season_reference = next(
+            (
+                item for item in get_crop_seasons()
+                if item["name"].casefold() == season.casefold()
+            ),
+            None,
+        )
+        if season_reference:
+            st.caption(
+                f"{season_reference['description']} Examples: {season_reference['examples']}."
+            )
         irrigation_options = ["", *[item.value for item in IrrigationType]]
         irrigation_default = profile.get("irrigation_type") or ""
         irrigation = st.selectbox(
@@ -303,7 +415,20 @@ def render_farm_plan(user: Dict[str, Any], profile: Dict[str, Any]) -> None:
             index=irrigation_options.index(irrigation_default)
             if irrigation_default in irrigation_options else 0,
         )
-        target_crop = st.text_input("🌱 Crop you are growing or considering")
+        state_crop_options = get_state_crop_options(state)
+        st.caption(
+            "State-wise crop choices are indicative. Confirm suitability and planting windows "
+            "with district-level agricultural guidance."
+        )
+        crop_choice = st.selectbox(
+            "🌱 State-wise crop selection",
+            ["No specific crop", *state_crop_options, "Other / not listed"],
+        )
+        target_crop = (
+            st.text_input("🌿 Other crop name")
+            if crop_choice == "Other / not listed"
+            else crop_choice if crop_choice != "No specific crop" else ""
+        )
         budget = st.number_input("💰 Budget in rupees (optional)", min_value=0, step=1000)
         language_codes = ["en", *[item.value for item in FarmerLanguage if item.value != "en"]]
         language_default = profile.get("language_preference") or "en"
@@ -317,17 +442,31 @@ def render_farm_plan(user: Dict[str, Any], profile: Dict[str, Any]) -> None:
         query = st.text_area("❓ What would you like help with?")
         submitted = st.form_submit_button("🌿 Build my farm plan", type="primary")
 
+    location_context = (state, district.strip(), location_query.strip())
+    if st.session_state.get("farm_location_context") != location_context:
+        st.session_state.pop("farm_location_options", None)
+        st.session_state.pop("farm_location", None)
     selected_location = st.session_state.get("farm_location")
     if search_location:
         if len(location_query.strip()) < 2:
             st.warning("Enter at least two characters to search for a weather location.")
         else:
-            locations = location_service.search(location_query.strip())
+            st.session_state.pop("farm_location", None)
+            locations = location_service.search(
+                location_query.strip(),
+                state=state,
+                district=district.strip() or None,
+            )
             st.session_state["farm_location_options"] = locations
+            st.session_state["farm_location_context"] = location_context
             if not locations:
                 st.warning("No places found. You can continue without location-specific weather.")
 
-    locations = st.session_state.get("farm_location_options", [])
+    locations = (
+        st.session_state.get("farm_location_options", [])
+        if st.session_state.get("farm_location_context") == location_context
+        else []
+    )
     if locations:
         labels = [
             f"{item['name']}, {item['district']}, {item['state']}"
@@ -347,8 +486,14 @@ def render_farm_plan(user: Dict[str, Any], profile: Dict[str, Any]) -> None:
             farm_input = FarmInput(
                 state=state,
                 district=district.strip(),
-                latitude=selected_location.get("latitude") if selected_location else None,
-                longitude=selected_location.get("longitude") if selected_location else None,
+                latitude=(
+                    selected_location.get("latitude")
+                    if selected_location else profile.get("latitude")
+                ),
+                longitude=(
+                    selected_location.get("longitude")
+                    if selected_location else profile.get("longitude")
+                ),
                 farm_size_acres=area,
                 soil_type=soil or None,
                 season=season,
@@ -496,10 +641,26 @@ def render_farm_plan(user: Dict[str, Any], profile: Dict[str, Any]) -> None:
 
 def render_crop_tracker(user: Dict[str, Any], profile: Dict[str, Any]) -> None:
     st.subheader("🚜 Crop tracker")
+    crop_state = profile.get("state") or list_indian_regions()[0]["name"]
+    st.caption(f"State-specific crop options are based on your farm profile: {crop_state}.")
     with st.form("crop_cycle_form"):
+        season = st.selectbox("🗓️ Growing season", [item.value for item in Season])
+        regional_crop_names = get_state_crop_options(crop_state)
+        crop_options = []
+        seen_crop_names = set()
+        for crop_name in [*regional_crop_names, *get_crop_name_options()]:
+            display_name = crop_name.title()
+            normalized_name = display_name.casefold()
+            if normalized_name not in seen_crop_names:
+                seen_crop_names.add(normalized_name)
+                crop_options.append(display_name)
+        st.caption(
+            "State-specific major and specialty crops appear first. Season calendars are broad "
+            "references; local sowing windows vary."
+        )
         crop_choice = st.selectbox(
-            "🌱 Select a crop",
-            ["Choose a crop", *get_crop_name_options(), "Other / not listed"],
+            "🌱 Select a state-wise crop",
+            ["Choose a crop", *crop_options, "Other / not listed"],
         )
         crop = (
             st.text_input("🌿 Crop name") if crop_choice == "Other / not listed"
@@ -512,7 +673,6 @@ def render_crop_tracker(user: Dict[str, Any], profile: Dict[str, Any]) -> None:
                 "Variety, climate, and local practice can change this."
             )
         variety = st.text_input("🌾 Variety (optional)")
-        season = st.selectbox("🗓️ Growing season", [item.value for item in Season])
         area = st.number_input(
             "📐 Field area (acres)",
             min_value=0.1,
@@ -1206,7 +1366,8 @@ def main() -> None:
         'alt="AI Farming Project banner showing crop fields, livestock, and a tractor">',
         unsafe_allow_html=True,
     )
-    st.title("🌾 Your farm, one clear plan.")
+    st.title("🌾 Your farm, a clear plan.")
+    st.markdown('<p class="farm-tagline">Smart steps for steady growth.</p>', unsafe_allow_html=True)
     st.caption(
         "Field-aware crop planning, weather guidance, crop tracking, and farm records for Indian farmers."
     )
