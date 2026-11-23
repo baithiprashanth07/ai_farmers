@@ -517,6 +517,11 @@ docker-compose up --build
 - 🔄 Satellite imagery (NDVI)
 
 ---
+## Website link & Demo
+https://aifarmers.streamlit.app/
+
+<img width="1920" height="1020" alt="image" src="https://github.com/user-attachments/assets/23a8d370-36c6-4c74-b423-dad6244fb9a5" />
+
 
 ## 📄 License
 
